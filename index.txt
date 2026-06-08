@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>口腔機能管理システム - Clinical Full Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 5ステップ進行バー用のアクティブ表現 */
+        .step-active { color: #1e40af; font-weight: 700; }
+        .step-active .node-circle { background-color: #2563eb; border-color: #1e40af; color: white; }
+
+        /* 🖨️ A4プリント出力用スタイル（4面・5面対応） */
+        @media print {
+            header, #step-indicator, .print\:hidden, button, .no-print {
+                display: none !important;
+            }
+            body {
+                background-color: #ffffff !important;
+                color: #000000 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            #print-area, #print-training-area {
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                max-width: 100% !important;
+            }
+            @page { margin: 15mm; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 font-sans antialiased">
+
+    <header class="bg-blue-800 text-white p-4 shadow-md sticky top-0 z-50 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <button id="btn-back" onclick="goBack()" class="hidden text-xs bg-blue-700/60 px-3 py-1.5 rounded-lg border border-blue-600/50 hover:bg-blue-700 font-medium transition-all print:hidden">⬅ 戻る</button>
+            <h1 id="header-title" class="text-sm font-bold tracking-wider">口腔機能管理システム</h1>
+        </div>
+        <div class="text-[11px] bg-blue-900/50 border border-blue-700 px-2 py-1 rounded text-blue-200 font-mono">Clinical Mode API V4</div>
+    </header>
+
+    <div id="step-indicator" class="max-w-md mx-auto bg-white border-b border-slate-200 py-3 sticky top-[53px] z-40 hidden shadow-sm print:hidden">
+        <div class="flex justify-between px-4 text-center text-[9px] text-slate-400 font-medium">
+            <div id="ind-1" class="flex flex-col items-center gap-1"><span class="w-4 h-4 flex items-center justify-center rounded-full border bg-slate-100 text-slate-500 font-bold node-circle text-[9px]">1</span><span>患者管理</span></div>
+            <div id="ind-2" class="flex flex-col items-center gap-1"><span class="w-4 h-4 flex items-center justify-center rounded-full border bg-slate-100 text-slate-500 font-bold node-circle text-[9px]">2</span><span>問診票</span></div>
+            <div id="ind-3" class="flex flex-col items-center gap-1"><span class="w-4 h-4 flex items-center justify-center rounded-full border bg-slate-100 text-slate-500 font-bold node-circle text-[9px]">3</span><span>精密検査</span></div>
+            <div id="ind-4" class="flex flex-col items-center gap-1"><span class="w-4 h-4 flex items-center justify-center rounded-full border bg-slate-100 text-slate-500 font-bold node-circle text-[9px]">4</span><span>総合診断</span></div>
+            <div id="ind-5" class="flex flex-col items-center gap-1"><span class="w-4 h-4 flex items-center justify-center rounded-full border bg-slate-100 text-slate-500 font-bold node-circle text-[9px]">5</span><span>説明・指導</span></div>
+        </div>
+    </div>
+
+    <main class="max-w-md mx-auto p-4 pb-24">
+        
+        <div id="page-1" class="space-y-5">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/60">
+                <h2 class="text-xs font-bold text-blue-800 mb-3 tracking-wider flex items-center gap-1.5">
+                    <span class="w-1.5 h-3.5 bg-blue-600 rounded-full inline-block"></span>新規患者カルテ作成
+                </h2>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-500 mb-1">患者氏名</label>
+                        <input id="new-name" type="text" placeholder="例：山田 太郎" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50/50">
+                    </div>
+                    <div class="flex gap-2">
+                        <div class="flex-1">
+                            <label class="block text-[11px] font-bold text-slate-500 mb-1">区分（保険診断基準）</label>
+                            <select id="new-type" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:border-blue-500">
+                                <option value="child">👶 小児（口腔機能発達不全症）</option>
+                                <option value="senior">👵 高齢者（口腔機能低下症）</option>
+                            </select>
+                        </div>
+                        <div class="flex items-end">
+                            <button onclick="addPatient()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-bold shadow-sm transition-all h-[38px]">+ 登録</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <h2 class="text-xs font-bold text-slate-400 mb-2.5 tracking-wider uppercase">📋 本日の電子カルテ一覧（自動ローカル保存）</h2>
+                <div id="patient-list-container" class="space-y-2"></div>
+            </div>
+        </div>
+
+
+        <div id="page-2" class="space-y-5 hidden">
+            <div id="p2-badge" class="p-3 rounded-xl font-bold text-xs shadow-sm border"></div>
+            
+            <div id="survey-child-box" class="space-y-4 hidden">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/60 space-y-4">
+                    <h3 class="text-xs font-bold text-blue-700 border-b border-blue-50 pb-2 flex items-center gap-1">🍽️ A. 食べる機能（C-1 ～ C-8）</h3>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-1. 歯の萌出（生え方）に遅れがありますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c1', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c1', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-2. 歯列・咬合の異常（噛み合わせ等）がありますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c2', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c2', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-3. 咀嚼に影響する「むし歯」がありますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c3', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c3', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-4. 強く噛みしめられない、または硬いものを避けますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c4', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">あてはまる</button><button type="button" onclick="setSurveyAnswer('c4', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">問題なし</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-5. 食べる時間が長すぎる、または短すぎますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c5', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">あてはまる</button><button type="button" onclick="setSurveyAnswer('c5', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">問題なし</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-6. 左右どちらか片側だけで噛む癖（偏咀嚼）がありますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c6', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c6', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-7. 飲み込むときに舌を突き出す癖がありますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c7', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c7', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-8. 食事の量・回数にムラや著しい異常がありますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c8', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c8', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/60 space-y-4">
+                    <h3 class="text-xs font-bold text-blue-700 border-b border-blue-50 pb-2 flex items-center gap-1">🗣️ B. 話す機能（C-9 ～ C-12）</h3>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-9. 構音（滑舌）に障害がありますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c9', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c9', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-10. 口唇の閉鎖不全（お口ぽかん）がありますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c10', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c10', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-11. 口腔習癖（指しゃぶり、爪噛みなど）がありますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c11', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c11', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-12. 舌小帯の形態（ヒモが短いなど）に異常が見られますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c12', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c12', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/60 space-y-4">
+                    <h3 class="text-xs font-bold text-blue-700 border-b border-blue-50 pb-2 flex items-center gap-1">💤 C. その他（C-13 ～ C-17）</h3>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-13. やせ、または肥満傾向（カウプ指数等の異常）がありますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c13', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c13', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-14. 日常的な口呼吸が見られますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c14', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c14', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-15. 口蓋扁桃等に肥大が見られますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c15', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c15', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-16. 睡眠時の「いびき」をかきますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c16', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c16', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                    <div class="space-y-1.5"><p class="text-xs font-medium text-slate-700">C-17. 上記以外の口腔機能発達に関わる臨床症状がありますか？</p><div class="grid grid-cols-2 gap-2"><button type="button" onclick="setSurveyAnswer('c17', true, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ある</button><button type="button" onclick="setSurveyAnswer('c17', false, this)" class="q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200">ない</button></div></div>
+                </div>
+            </div>
+
+            <div id="survey-senior-box" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/60 space-y-5 hidden">
+                <h3 class="text-xs font-bold text-blue-800 border-b border-slate-100 pb-2 uppercase tracking-wider">⚠️ 口腔機能低下症 主観スクリーニング（7項目完全網羅）</h3>
+                <div class="space-y-2"><p class="text-xs font-bold text-slate-700">① 口腔衛生：お口の中の汚れ、舌の白さが気になりますか？</p><div class="flex flex-col gap-1.5"><button type="button" onclick="setSurveyAnswer('s1_hygiene', true, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">気になる（白く汚れている）</button><button type="button" onclick="setSurveyAnswer('s1_hygiene', false, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">気にならない</button></div></div>
+                <div class="space-y-2"><p class="text-xs font-bold text-slate-700">② 口腔乾燥：お口の「かわき」が気になりますか？</p><div class="flex flex-col gap-1.5"><button type="button" onclick="setSurveyAnswer('s2_dryness', true, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">よく乾く・パサつくものが食べにくい</button><button type="button" onclick="setSurveyAnswer('s2_dryness', false, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">気にならない</button></div></div>
+                <div class="space-y-2"><p class="text-xs font-bold text-slate-700">③ 咬合力低下：歯や入れ歯で、硬いものが噛みにくいですか？</p><div class="flex flex-col gap-1.5"><button type="button" onclick="setSurveyAnswer('s3_bite', true, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">たくあん、硬いお肉が噛みにくい</button><button type="button" onclick="setSurveyAnswer('s3_bite', false, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">何でも噛める</button></div></div>
+                <div class="space-y-2"><p class="text-xs font-bold text-slate-700">④ 滑舌・運動：言葉がなめらかに出ない、口がもつれますか？</p><div class="flex flex-col gap-1.5"><button type="button" onclick="setSurveyAnswer('s4_motor', true, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">話しにくい・口がよくもつれる</button><button type="button" onclick="setSurveyAnswer('s4_motor', false, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">ハッキリ話せる</button></div></div>
+                <div class="space-y-2"><p class="text-xs font-bold text-slate-700">⑤ 舌の力：食べ物を飲み込むとき、奥へ送り込みにくいですか？</p><div class="flex flex-col gap-1.5"><button type="button" onclick="setSurveyAnswer('s5_tongue', true, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">うまく奥へ送り込めない、口に残る気がする</button><button type="button" onclick="setSurveyAnswer('s5_tongue', false, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">問題ない</button></div></div>
+                <div class="space-y-2"><p class="text-xs font-bold text-slate-700">⑥ 咀嚼機能：半年前と比較して、さらに食べ物が噛みにくくなりましたか？</p><div class="flex flex-col gap-1.5"><button type="button" onclick="setSurveyAnswer('s6_chew', true, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">噛みにくくなった</button><button type="button" onclick="setSurveyAnswer('s6_chew', false, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">変わらない</button></div></div>
+                <div class="space-y-2"><p class="text-xs font-bold text-slate-700">⑦ 嚥下機能：お茶を飲むときなどに「むせる」ことがありますか？</p><div class="flex flex-col gap-1.5"><button type="button" onclick="setSurveyAnswer('s7_swallow', true, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">よくむせる・痰がよくからむ</button><button type="button" onclick="setSurveyAnswer('s7_swallow', false, this)" class="q-btn py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 text-left">めったにむせない</button></div></div>
+            </div>
+
+            <button onclick="goToPage(3)" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-md text-center block text-sm transition-all">
+                精密検査データの入力へ ➔
+            </button>
+        </div>
+
+
+        <div id="page-3" class="space-y-5 hidden">
+            <div id="p3-badge" class="p-3 rounded-xl font-bold text-xs shadow-sm border"></div>
+
+            <div id="device-child-box" class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/60 space-y-5 hidden">
+                <h3 class="text-xs font-bold text-blue-800 border-b border-slate-100 pb-2 uppercase tracking-wider">🔧 客観的精密測定データ入力</h3>
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-slate-600">💋 口唇閉鎖力 (例: リップデカむ測定器 ※問診 C-10 連動)</label>
+                    <div class="flex items-center gap-2"><input id="dev-lip" type="number" step="0.1" placeholder="0.0" class="w-28 px-3 py-2 border rounded-xl text-center font-bold focus:outline-none focus:border-blue-500 bg-slate-50"><span class="text-sm font-bold">N</span><span class="text-[11px] text-slate-400 ml-auto">基準: 1.6 N以上</span></div>
+                </div>
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-slate-600">👅 最大舌圧測定 (小児用独立検査)</label>
+                    <div class="flex items-center gap-2"><input id="dev-child-tongue" type="number" step="0.1" placeholder="0.0" class="w-28 px-3 py-2 border rounded-xl text-center font-bold focus:outline-none focus:border-blue-500 bg-slate-50"><span class="text-sm font-bold">kPa</span><span class="text-[11px] text-slate-400 ml-auto">基準: 30.0 kPa以上</span></div>
+                </div>
+            </div>
+
+            <div id="device-senior-box" class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/60 space-y-5 hidden">
+                <h3 class="text-xs font-bold text-blue-800 border-b border-slate-100 pb-2 uppercase tracking-wider">⚡ 臨床客観検査データ（5項目）</h3>
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-slate-600">💧 口腔粘膜湿潤度（ムーカス® ※問診 ②連動）</label>
+                    <div class="flex items-center gap-2"><input id="dev-mucus" type="number" step="0.1" placeholder="0.0" class="w-28 px-3 py-2 border rounded-xl text-center font-bold focus:outline-none focus:border-blue-500 bg-slate-50"><span class="text-sm font-bold">値</span><span class="text-[11px] text-slate-400 ml-auto">低下基準: 27.0 未満</span></div>
+                </div>
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-slate-600">🦷 全顎咬合圧（デンタルプレスケール等 ※問診 ③連動）</label>
+                    <div class="flex items-center gap-2"><input id="dev-bite" type="number" placeholder="0" class="w-28 px-3 py-2 border rounded-xl text-center font-bold focus:outline-none focus:border-blue-500 bg-slate-50"><span class="text-sm font-bold">N</span><span class="text-[11px] text-slate-400 ml-auto">低下基準: 200 N 未満</span></div>
+                </div>
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-slate-600">👅 最大舌圧測定（※問診 ⑤連動）</label>
+                    <div class="flex items-center gap-2"><input id="dev-senior-tongue" type="number" step="0.1" placeholder="0.0" class="w-28 px-3 py-2 border rounded-xl text-center font-bold focus:outline-none focus:border-blue-500 bg-slate-50"><span class="text-sm font-bold">kPa</span><span class="text-[11px] text-slate-400 ml-auto">低下基準: 30.0 未満</span></div>
+                </div>
+            </div>
+
+            <button onclick="generateDiagnosis()" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-3 px-4 rounded-xl shadow-md text-center block text-sm transition-all">
+                📊 総合診断を実行する
+            </button>
+        </div>
+
+
+        <div id="page-4" class="space-y-5 hidden">
+            <div id="print-area" class="bg-white p-6 rounded-2xl shadow-md border border-slate-200/80 space-y-6">
+                <div class="hidden print:block text-center border-b-2 border-slate-800 pb-2 mb-4">
+                    <h1 class="text-xl font-bold tracking-widest text-slate-900">口腔機能管理診断報告書（カルテ控）</h1>
+                </div>
+                <div class="text-center border-b pb-4">
+                    <span id="result-badge" class="text-xs font-bold px-3 py-1 rounded-full"></span>
+                    <h2 id="result-name" class="text-lg font-bold mt-2 text-slate-800"></h2>
+                    <p class="text-xs text-slate-400 mt-1">臨床診断実施日: 2026年6月8日</p>
+                </div>
+                <div id="result-status-box" class="p-4 rounded-xl text-center font-bold text-sm"></div>
+                <div>
+                    <h3 class="text-xs font-bold text-blue-800 mb-2 tracking-wider">📋 領域別検査詳細（精密数値を最優先判定）</h3>
+                    <table class="w-full text-xs text-left border-collapse">
+                        <thead>
+                            <tr class="bg-blue-50/50 text-blue-900 border-b border-blue-100">
+                                <th class="p-2.5 font-bold rounded-l-lg">診断基準・検査項目</th>
+                                <th class="p-2.5 font-bold">検査ステータス</th>
+                                <th class="p-2.5 font-bold rounded-r-lg">最終臨床判定</th>
+                            </tr>
+                        </thead>
+                        <tbody id="result-table-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="space-y-2 print:hidden">
+                <button onclick="goToPage(5)" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-md text-center text-sm transition-all flex items-center justify-center gap-2">
+                    🏃 患者さん向け分かりやすい説明・トレーニング画面へ ➔
+                </button>
+                <div class="flex gap-2">
+                    <button onclick="window.print()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-xl text-xs transition-all">🖨️ カルテ用に印刷</button>
+                    <button onclick="goToPage(1)" class="flex-1 bg-slate-700 hover:bg-slate-800 text-white font-bold py-2 px-4 rounded-xl text-xs transition-all">カルテ一覧へ</button>
+                </div>
+            </div>
+        </div>
+
+
+        <div id="page-5" class="space-y-5 hidden">
+            <div id="print-training-area" class="space-y-5">
+                <div class="hidden print:block text-center border-b-2 border-blue-800 pb-2 mb-4">
+                    <h1 class="text-xl font-bold text-blue-900 tracking-wider">お口のけんこう指導計画書</h1>
+                </div>
+
+                <div class="bg-blue-900 text-white p-5 rounded-2xl shadow-sm flex justify-between items-center print:bg-slate-100 print:text-slate-900 print:border print:border-slate-300">
+                    <div>
+                        <span id="p5-user-type-tag" class="text-[9px] bg-blue-700 text-blue-100 px-2 py-0.5 rounded font-bold uppercase print:bg-slate-300 print:text-slate-800">Patient Guidance</span>
+                        <h2 id="training-patient-name" class="text-base font-bold mt-1"></h2>
+                    </div>
+                    <span class="text-2xl print:hidden">🌟</span>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border-2 border-blue-100 space-y-3">
+                    <h3 class="text-xs font-bold text-blue-800 flex items-center gap-1">
+                        <span class="w-1.5 h-3.5 bg-blue-600 rounded-full inline-block"></span>今日の結果とお口の状態
+                    </h3>
+                    <p id="p5-diagnosis-summary-text" class="text-xs text-slate-700 leading-relaxed font-medium bg-blue-50/50 p-3 rounded-xl border border-blue-50"></p>
+                    <div class="space-y-1.5">
+                        <span class="text-[11px] font-bold text-slate-400 block tracking-wide uppercase">👇 少しトレーニングが必要なところ</span>
+                        <div id="p5-weakness-list" class="space-y-1"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-xs font-bold text-slate-500 mb-3 tracking-wider uppercase px-1">🧘 お家でやってみよう！おすすめの体操</h3>
+                    <div id="training-cards-container" class="space-y-4"></div>
+                </div>
+            </div>
+
+            <div class="pt-2 space-y-2 no-print print:hidden">
+                <button onclick="window.print()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-md text-center text-sm transition-all flex items-center justify-center gap-2">
+                    🖨️ この指導内容・体操メニューを印刷して渡す
+                </button>
+                <button onclick="goToPage(4)" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-center text-xs transition-all">
+                    ⬅ 4. 総合診断結果に戻る
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let currentStep = 1;
+        let selectedPatient = null;
+        let patients = JSON.parse(localStorage.getItem('clinical_patients_v5')) || [
+            { id: 1, name: "田中 結菜 (5歳)", type: "child", lastChecked: "未実施" },
+            { id: 2, name: "佐藤 一郎 (72歳)", type: "senior", lastChecked: "2026/06/01" }
+        ];
+        let sessionAnswers = {};
+        let detectedAnomalies = []; 
+
+        window.onload = function() { renderPatientList(); };
+
+        function saveToLocalStorage() { localStorage.setItem('clinical_patients_v5', JSON.stringify(patients)); }
+
+        function renderPatientList() {
+            const container = document.getElementById('patient-list-container');
+            container.innerHTML = '';
+            patients.forEach(p => {
+                const color = p.type === 'child' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                const tag = p.type === 'child' ? '👶 小児発達' : '👵 高齢低下';
+                const div = document.createElement('div');
+                div.className = "bg-white p-4 rounded-xl shadow-sm border border-slate-200/70 flex justify-between items-center cursor-pointer hover:border-blue-400 transition-all";
+                div.onclick = () => selectPatient(p.id);
+                div.innerHTML = `<div><div class="flex items-center gap-2 mb-1"><span class="text-[10px] font-bold px-2 py-0.5 rounded-md border ${color}">${tag}</span><span class="font-bold text-slate-800 text-sm">${p.name}</span></div><p class="text-[11px] text-slate-400">最終ステータス: ${p.lastChecked}</p></div><span class="text-blue-500 text-xs font-bold">カルテを開く ➔</span>`;
+                container.appendChild(div);
+            });
+        }
+
+        function addPatient() {
+            const name = document.getElementById('new-name').value.trim();
+            const type = document.getElementById('new-type').value;
+            if(!name) return alert('氏名を入力してください');
+            patients.push({ id: Date.now(), name: name, type: type, lastChecked: "未実施" });
+            document.getElementById('new-name').value = '';
+            saveToLocalStorage();
+            renderPatientList();
+        }
+
+        function selectPatient(id) {
+            selectedPatient = patients.find(p => p.id === id);
+            sessionAnswers = {}; 
+            detectedAnomalies = [];
+
+            document.getElementById('p2-badge').className = selectedPatient.type === 'child' ? "p-3 bg-blue-50 text-blue-800 border border-blue-200 rounded-xl" : "p-3 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-xl";
+            document.getElementById('p2-badge').innerText = `選択中カルテ: ${selectedPatient.name}`;
+            document.getElementById('p3-badge').className = selectedPatient.type === 'child' ? "p-3 bg-blue-50 text-blue-800 border border-blue-200 rounded-xl" : "p-3 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-xl";
+            document.getElementById('p3-badge').innerText = `選択中カルテ: ${selectedPatient.name}`;
+
+            document.getElementById('survey-child-box').classList.toggle('hidden', selectedPatient.type !== 'child');
+            document.getElementById('survey-senior-box').classList.toggle('hidden', selectedPatient.type !== 'senior');
+            document.getElementById('device-child-box').classList.toggle('hidden', selectedPatient.type !== 'child');
+            document.getElementById('device-senior-box').classList.toggle('hidden', selectedPatient.type !== 'senior');
+
+            document.querySelectorAll('.q-btn').forEach(b => b.className = "q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200 w-full text-center block font-medium transition-all");
+            goToPage(2);
+        }
+
+        function setSurveyAnswer(id, hasProblem, element) {
+            sessionAnswers[id] = hasProblem;
+            const siblings = element.parentNode.querySelectorAll('.q-btn');
+            siblings.forEach(b => { b.className = "q-btn py-1.5 px-3 bg-slate-50 text-slate-700 rounded-xl text-xs border border-slate-200 w-full text-center block font-medium"; });
+            element.classList.remove('bg-slate-50', 'text-slate-700', 'border-slate-200');
+            element.classList.add('bg-blue-600', 'text-white', 'border-blue-700');
+        }
+
+        function goToPage(pageNum) {
+            currentStep = pageNum;
+            document.getElementById('step-indicator').classList.toggle('hidden', pageNum === 1);
+            for(let i=1; i<=5; i++) {
+                document.getElementById(`page-${i}`).classList.add('hidden');
+                const ind = document.getElementById(`ind-${i}`);
+                if(ind) ind.className = "flex flex-col items-center gap-1 text-slate-300";
+            }
+            document.getElementById(`page-${pageNum}`).classList.remove('hidden');
+            document.getElementById(`ind-${pageNum}`).className = "flex flex-col items-center gap-1 step-active";
+            document.getElementById('btn-back').classList.toggle('hidden', pageNum === 1);
+
+            if (pageNum === 5) {
+                renderPatientTrainingAndSummary();
+            }
+        }
+
+        function goBack() { if(currentStep > 1) goToPage(currentStep - 1); }
+
+        function generateDiagnosis() {
+            const tbody = document.getElementById('result-table-body');
+            const statusBox = document.getElementById('result-status-box');
+            tbody.innerHTML = '';
+            detectedAnomalies = []; 
+
+            document.getElementById('result-name').innerText = selectedPatient.name;
+            const badge = document.getElementById('result-badge');
+            badge.className = selectedPatient.type === 'child' ? "text-xs font-bold px-3 py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-200" : "text-xs font-bold px-3 py-1 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200";
+            badge.innerText = selectedPatient.type === 'child' ? "小児発達管理" : "高齢機能低下症管理";
+
+            let totalAlertCount = 0;
+
+            if (selectedPatient.type === 'child') {
+                const lipInput = parseFloat(document.getElementById('dev-lip').value);
+                const tongueInput = parseFloat(document.getElementById('dev-child-tongue').value);
+
+                // 17項目定義ベース
+                const childQuestions = [
+                    { id: 'c1', name: 'C-1. 歯の萌出遅れ' }, { id: 'c2', name: 'C-2. 歯列・咬合の異常' },
+                    { id: 'c3', name: 'C-3. 咀嚼に影響する虫歯' }, { id: 'c4', name: 'C-4. 硬食回避（咀嚼不全）' },
+                    { id: 'c5', name: 'C-5. 食事時間の異常' }, { id: 'c6', name: 'C-6. 偏咀嚼（片側噛み癖）' },
+                    { id: 'c7', name: 'C-7. 異常嚥下癖' }, { id: 'c8', name: 'C-8. 食行動の異常' },
+                    { id: 'c9', name: 'C-9. 構音障害（滑舌）' }, { id: 'c10', name: 'C-10. 口唇閉鎖不全（お口ぽかん）' },
+                    { id: 'c11', name: 'C-11. 口腔習癖' }, { id: 'c12', name: 'C-12. 舌小帯の異常' },
+                    { id: 'c13', name: 'C-13. 体格異常' }, { id: 'c14', name: 'C-14. 日常的口呼吸' },
+                    { id: 'c15', name: 'C-15. 扁桃肥大' }, { id: 'c16', name: 'C-16. 睡眠時いびき' },
+                    { id: 'c17', name: 'C-17. その他臨床症状' }
+                ];
+
+                childQuestions.forEach(q => {
+                    let isSurveyBad = sessionAnswers[q.id] || false;
+                    let displayValue = isSurveyBad ? "問診:異常" : "問診:正常";
+                    let finalBad = isSurveyBad;
+
+                    if (q.id === 'c10' && !isNaN(lipInput)) {
+                        const isDeviceBad = lipInput < 1.6;
+                        displayValue = `数値:${lipInput}N / 問診:${isSurveyBad ? '異常' : '正常'}`;
+                        if (isDeviceBad) { finalBad = true; displayValue += " ⚠️数値異常"; }
+                    }
+
+                    appendRow(q.name, displayValue, finalBad);
+                    if (finalBad) { totalAlertCount++; detectedAnomalies.push(q.id); }
+                });
+
+                if (!isNaN(tongueInput)) {
+                    const tongueBad = tongueInput < 30.0;
+                    appendRow("最大舌圧（小児測定器）", `${tongueInput} kPa`, tongueBad);
+                    if (tongueBad) { totalAlertCount++; detectedAnomalies.push('child_tongue'); }
+                }
+
+                statusBox.innerText = totalAlertCount >= 1 ? `【確定判定】口腔機能発達不全症の疑い (該当: ${totalAlertCount}項目)` : "【確定判定】正常発達（クリア）";
+                statusBox.className = totalAlertCount >= 1 ? "p-4 rounded-xl text-center font-bold text-sm bg-red-50 text-red-700 border border-red-200" : "p-4 rounded-xl text-center font-bold text-sm bg-emerald-50 text-emerald-700 border border-emerald-200";
+                selectedPatient.lastChecked = totalAlertCount >= 1 ? "要指導・管理" : "正常";
+
+            } else {
+                const mucusVal = parseFloat(document.getElementById('dev-mucus').value);
+                const biteVal = parseFloat(document.getElementById('dev-bite').value);
+                const tongueVal = parseFloat(document.getElementById('dev-senior-tongue').value);
+
+                const seniorDomain = [
+                    { key: 's1_hygiene', name: '① 口腔衛生状態', device: null, hasDevice: false },
+                    { key: 's2_dryness', name: '② 口腔乾燥 (ムーカス®)', device: mucusVal, hasDevice: !isNaN(mucusVal), threshold: 27.0, unit: '' },
+                    { key: 's3_bite', name: '③ 咬合力低下 (全顎咬合圧)', device: biteVal, hasDevice: !isNaN(biteVal), threshold: 200, unit: ' N' },
+                    { key: 's4_motor', name: '④ 舌口唇運動機能 (滑舌もつれ)', device: null, hasDevice: false },
+                    { key: 's5_tongue', name: '⑤ 低舌圧 (最大舌圧測定)', device: tongueVal, hasDevice: !isNaN(tongueVal), threshold: 30.0, unit: ' kPa' },
+                    { key: 's6_chew', name: '⑥ 咀嚼機能低下 (半年間の比較)', device: null, hasDevice: false },
+                    { key: 's7_swallow', name: '⑦ 嚥下機能低下 (むせ頻度)', device: null, hasDevice: false }
+                ];
+
+                seniorDomain.forEach(domain => {
+                    let surveyBad = sessionAnswers[domain.key] || false;
+                    let isDomainBad = surveyBad;
+                    let displayString = surveyBad ? "問診:低下あり" : "問診:正常";
+
+                    if (domain.hasDevice) {
+                        let isDeviceBad = domain.device < domain.threshold;
+                        displayString = `数値:${domain.device}${domain.unit} / 問診:${surveyBad ? '低下' : '正常'}`;
+                        if (isDeviceBad) { isDomainBad = true; displayString += " ⚠️数値低下"; }
+                    }
+
+                    appendRow(domain.name, displayString, isDomainBad);
+                    if (isDomainBad) { totalAlertCount++; detectedAnomalies.push(domain.key); }
+                });
+
+                statusBox.innerText = totalAlertCount >= 3 ? `【診断基準該当】口腔機能低下症 該当 (該当: ${totalAlertCount} / 7 領域)` : `【確定判定】維持良好 (該当領域: ${totalAlertCount})`;
+                statusBox.className = totalAlertCount >= 3 ? "p-4 rounded-xl text-center font-bold text-sm bg-amber-50 text-amber-800 border border-amber-200" : "p-4 rounded-xl text-center font-bold text-sm bg-emerald-50 text-emerald-700 border border-emerald-200";
+                selectedPatient.lastChecked = totalAlertCount >= 3 ? "低下症該当" : "維持良好";
+            }
+
+            saveToLocalStorage();
+            renderPatientList();
+            goToPage(4);
+        }
+
+        function appendRow(item, value, isAlert) {
+            const tbody = document.getElementById('result-table-body');
+            const tr = document.createElement('tr');
+            const alertStyle = isAlert ? 'text-red-600 font-bold bg-red-50/50' : 'text-emerald-700 font-semibold bg-emerald-50/20';
+            tr.innerHTML = `<td class="p-2.5 text-[11px] font-bold text-slate-700">${item}</td><td class="p-2.5 text-[11px] text-slate-500 font-medium">${value}</td><td class="p-2.5 text-[11px] ${alertStyle}">${isAlert ? '❌ 異常・機能低下' : '✅ 正常'}</td>`;
+            tbody.appendChild(tr);
+        }
+
+        function renderPatientTrainingAndSummary() {
+            const cardsContainer = document.getElementById('training-cards-container');
+            const weaknessList = document.getElementById('p5-weakness-list');
+            const summaryText = document.getElementById('p5-diagnosis-summary-text');
+            
+            cardsContainer.innerHTML = '';
+            weaknessList.innerHTML = '';
+
+            document.getElementById('training-patient-name').innerText = `${selectedPatient.name} 向け機能説明＆トレーニング指導書`;
+
+            const translationMaster = {
+                // 小児用フル網羅マッピング
+                'c1': { label: '歯の生え方の遅れ', speech: '🦷 歯の生え方が少しのんびりしています。', title: '🥼 歯科医師による経過観察指導', procedure: '定期的な歯科検診でお口の中をチェックし、大人の歯が正しい位置に向かって準備できているか見守りましょう。', icon: '🔹[イラスト: 綺麗な生え変わりをチェックする歯医者さん]🔹' },
+                'c2': { label: '歯並び・噛み合わせの異常', speech: '🦷 歯並びや上下の噛み合わせのバランスに注意が必要です。', title: '顎・歯列の健全育成アプローチ', procedure: '歯科医師の指導のもと、顎の正しい成長を促す食事環境の整備や、必要に応じた矯正装置の検討を行います。', icon: '🔹[イラスト: 上下の噛み合わせのバランスをチェックする正面図]🔹' },
+                'c3': { label: '咀嚼に影響する虫歯', speech: '😈 食べ物をしっかり噛む邪魔をしている虫歯があります。', title: '🪥 迅速な虫歯治療とフッ素塗布', procedure: 'まずは虫歯治療を最優先で完了させます。その後、再び虫歯にならないよう正しいブラッシング法とフッ素塗布を並行します。', icon: '🔹[イラスト: 歯をきれいにシャカシャカ磨く子供の絵]🔹' },
+                'c4': { label: '硬いものが苦手（咀嚼不全）', speech: '🍎 硬い食べ物を避ける、または噛む回数が少なくなっています。', title: 'カミカミモグモグ訓練（咀嚼能率向上）', procedure: 'ガムや歯ごたえのある食材（根菜類など）を使い、左右の奥歯を均等に使って30回数えながら噛む練習をしましょう。', icon: '🔹[イラスト: 左右の奥歯でしっかりとカミカミしている可愛い子供の絵]🔹' },
+                'c5': { label: '食事時間の異常', speech: '⏳ 食事の時間が長すぎる、または早すぎます。', title: '🍱 食事環境と姿勢の見直し指導', procedure: '足の裏がしっかりと床につく椅子の高さに調整し、噛むことに集中できる環境（テレビを消す等）を整え、20〜30分目標で食べる練習をします。', icon: '🔹[イラスト: 足が床にしっかりつき、良い姿勢で食事をする子供の絵]🔹' },
+                'c6': { label: '片側噛みの癖（偏咀嚼）', speech: '🥗 いつも同じ側（右側か左側だけ）で食べる癖があります。', title: '🍱 もぐもぐ左右バランスチェック', procedure: '食事中、意識して食べ物をいつもと反対側の奥歯へ運ぶよう声をかけます。右・左交互に使う習慣をつけていきます。', icon: '🔹[イラスト: 右と左の顎へ交互に食べ物が動くイメージ矢印の絵]🔹' },
+                'c7': { label: '異常嚥下癖（ベロの突き出し）', speech: '👅 飲み込むときにベロを前に突き出す癖があります。', title: '👅 ごっくん嚥下トレーニング', procedure: 'ストローやコップで飲むとき、ベロを歯列より前に出さずに、上あごの天井につけて「ごっくん」と綺麗に飲み込む練習をします。', icon: '🔹[イラスト: ベロを引っ込めて綺麗に飲み込んでいる口元断面図]🔹' },
+                'c8': { label: '食行動の異常', speech: '🍛 食べる量や回数のムラが非常に大きいです。', title: '📊 規則正しい食生活のカウンセリング', procedure: '食事の間隔を一定にし、おやつの時間を固定するなど、空腹感を感じるリズムを生活の中に構築していきます。', icon: '🔹[イラスト: 時計の規則正しい時間を意識した食事アイコン]🔹' },
+                'c9': { label: '構音障害（滑舌低下）', speech: '🗣️ サ行やタ行など、特定の音がハッキリ発音しにくいです。', title: '🗣️ ことばハッキリ発音レッスン', procedure: '鏡を見ながら、お口を大きく動かして発音の練習を行います。ベロをなめらかに動かす事前ストレッチも効果的です。', icon: '🔹[イラスト: 大きく口を開けて「あ・い・う・え・お」の形を作る絵]🔹' },
+                'c10': { label: 'お口ぽかん（くちびるの力が弱い）', speech: '💋 普段からお口がぽかんと開きやすく、くちびるを閉じる力が少し弱いです。', title: '💋 ボタン引っ張り体操（くちびるのトレーニング）', procedure: '紐を通したボタンを歯とくちびるの間に挟み、紐を前に優しく引っ張ります。くちびるがポロッと抜けないように10秒間ぎゅっと耐えます！', icon: '🔹[イラスト: くちびるでボタンを挟んでピシッと閉じ、紐を引っ張る絵]🔹' },
+                'c11': { label: '口腔習癖（指しゃぶり等）', speech: '☝ 指しゃぶりや爪噛み、唇を噛む癖が続いています。', title: '🧸 やさしい習癖離脱のアプローチ', procedure: '癖が出そうになったら手遊びに誘導したり、絵本に集中させるなど、叱らずに自発的にお口から手が離れるようサポートします。', icon: '🔹[イラスト: 手をおもちゃや積み木で楽しく動かしている絵]🔹' },
+                'c12': { label: '舌小帯の異常', speech: '👅 ベロの裏のヒモが短く、ベロが上に上がりにくいです。', title: '👅 ベロのストレッチ運動', procedure: 'ベロをできるだけ上あごの天井へ向かって思い切り伸ばすストレッチを行い、ヒモの突っ張りを和らげる訓練をします。', icon: '🔹[イラスト: ベロを真上にまっすぐ伸ばしているお口の絵]🔹' },
+                'c13': { label: '体格の異常', speech: '⚖ 身長に比べて、やせすぎ、または肥満の傾向があります。', title: '🥗 栄養バランスと生活リズムの調整', procedure: '小児科や管理栄養士と連携し、お口の噛む機能に見合った適切な栄養摂取量と、規則正しい運動バランスを整えます。', icon: '🔹[イラスト: バランスの良い食事プレートの絵]🔹' },
+                'c14': { label: '日常的口呼吸', speech: '👃 鼻ではなく、お口でハァハァと息をする癖がついています。', title: '👃 鼻呼吸への誘導トレーニング', procedure: '日常の遊びの中で「鼻から吸って口から吐く」深呼吸ゲームを行い、意識を鼻呼吸へ切り替えさせていきます。', icon: '🔹[イラスト: 鼻からスーッと空気を吸い込んでいるクリーンな絵]🔹' },
+                'c15': { label: '扁桃の肥大', speech: '🩺 のどの奥の扁桃（へんとう）が大きく腫れやすい傾向です。', title: '🩺 耳鼻咽喉科との専門連携対応', procedure: '歯科だけでなく、耳鼻咽喉科の専門医と連携し、呼吸の通り道（気道）が狭くなっていないか共同で観察・管理します。', icon: '🔹[イラスト: のどの奥をライトで優しくチェックしている医療絵]🔹' },
+                'c16': { label: '睡眠時いいびき', speech: '💤 寝ているときに、大きないびきをかくことがあります。', title: '💤 横向き睡眠の推奨と睡眠環境改善', procedure: '仰向けで寝ると気道が塞がりやすいため、抱き枕などを使って横向きで寝る工夫をし、就寝時の呼吸を楽にします。', icon: '🔹[イラスト: すやすやと横向きで気持ちよく眠っている子供の絵]🔹' },
+                'c17': { label: 'その他の臨床症状', speech: '🩺 その他、お口の健全な成長に注意すべきサインがあります。', title: '🥼 個別オーダーメイド機能管理', procedure: '担当歯科医師が指定した、患者さんの具体的な症状に完全に合わせた個別特別メニューを院内で直接始動します。', icon: '🔹[イラスト: カルテを見ながら優しくお話しする歯科衛生士の絵]🔹' },
+                'child_tongue': { label: 'ベロの力が弱い（舌圧不全）', speech: '👅 飲み込むときにベロが正しい位置に上がっていません。', title: '👅 スポットポジション・ポンッ体操（ベロの筋トレ）', procedure: 'ベロの先を、上あごのザラザラした部分（スポット）に当てます。ベロ全体を上あごにピタッと吸い付けて、5秒間耐えた後「ポンッ！」と音を立てて離します。', icon: '🔹[イラスト: お口の中でベロが上あごの天井へぴったり吸い付いている断面イラスト]🔹' },
+
+                // 高齢者用7大領域マッピング
+                's1_hygiene': { label: '口腔衛生状態の不良', speech: '✨ お口の中の細菌や、ベロの上の白さ（舌苔）が少し目立っています。', title: '🪥 徹底セルフケアと舌クリーニング指導', procedure: 'ベロ専用の柔らかい舌ブラシを使い、奥から手前へ優しくなでるように汚れを落とします。食後の丁寧なうがいも徹底しましょう。', icon: '🔹[イラスト: 舌ブラシを使って優しくベロの汚れをお手入れする絵]🔹' },
+                's2_dryness': { label: 'お口の乾燥・渇き', speech: '💧 お口の唾液（だえき）が少なくなり、乾きやすくなっています。', title: '💧 潤いを取り戻す！三大唾液腺マッサージ', procedure: '①耳の下（耳下腺）を後ろから前へ。②あごの骨の内側の柔らかい部分（顎下腺）を親指で押し上げる。食前に各10回行うと唾液がよく出ます。', icon: '🔹[イラスト: 顔の側面図。耳の下とあごのラインを優しくマッサージする指の動き]🔹' },
+                's3_bite': { label: '噛む力の低下（全顎咬合圧）', speech: '🦷 奥歯でグッと噛み締める力が少し弱まっています。', title: '💪 あごを支える筋肉のもみほぐしストレッチ', procedure: '奥歯を噛んだときに硬くなるあごの筋肉（咬筋）と、こめかみの筋肉（側頭筋）を、手のひらでクルクルと優しくもみほぐし、噛みやすくします。', icon: '🔹[イラスト: こめかみとエラ部分の筋肉を手のひらで優しくマッサージしているシニアのイラスト]🔹' },
+                's4_motor': { label: '舌口唇の運動もつれ（滑舌低下）', speech: '🗣️ 口元やベロの動きが少し滑らかさを欠き、もつれやすいです。', title: '🗣️ 早口パタカラ発音ストレッチ', procedure: '「パ・パ・パ・パ」「タ・タ・タ・タ」「カ・カ・カ・カ」「ラ・ラ・ラ・ラ」と、一音ずつ限界の速さで5秒間連発するトレーニングを行います。', icon: '🔹[イラスト: ハキハキと声を出すシニアのイラスト]🔹' },
+                's5_tongue': { label: 'ベロの送り込み・飲み込み力の低下', speech: '👅 ベロの筋力や圧力が下がり、食べ物を喉の奥へ送り出す力が弱まっています。', title: '🗣️ 元気にお口を動かす「パタカラ体操」', procedure: '「パ・タ・カ・ラ」と一音ずつ、お口を大きく開けてハッキリ発音します。特に「タ」「カ」はベロの根元を上あごの天井に強く押し付けるように意識してください。', icon: '🔹[イラスト: パタカラと声を出すおじいさんの並び絵]🔹' },
+                's6_chew': { label: '咀嚼機能の低下', speech: '🍱 半年前に比べて硬いものが目立って食べづらくなっています。', title: '🥩 咀嚼能率を取り戻すお食事の工夫', procedure: '食材に隠し包丁（切れ目）を入れたり、少し小さめにカットして、現在の噛む力でも効率よく細かく噛み砕き、消化を助ける工夫をします。', icon: '🔹[イラスト: 切れ目の入った柔らかいお肉や小さくカットされた食材の絵]🔹' },
+                's7_swallow': { label: '嚥下機能の低下（むせ症状）', speech: '🍵 お茶やスープを飲むときに、日常的に「むせる」ことがあります。', title: '🍵 ごっくん嚥下前のお辞儀ポーズ指導', procedure: '飲み込む瞬間、あごを少し引き、軽くお辞儀をするような姿勢を取ると、気道が自動的に閉じて誤嚥（ごえん・むせ）を劇的に防ぐことができます。', icon: '🔹[イラスト: 椅子に座り、あごを少し引いてお茶を飲む横向きのシニアの姿勢絵]🔹' }
+            };
+
+            if (detectedAnomalies.length === 0) {
+                summaryText.innerText = selectedPatient.type === 'child' ? "現在、お口の機能はとても順調に発達しています！今のきれいな習慣を続けましょう。" : "現在、年齢基準と比較してもお口の衰えは見られず、とても元気な「健口状態」です。";
+                cardsContainer.innerHTML = `<div class="bg-white p-8 rounded-2xl border text-center text-slate-400 text-xs font-semibold">✅ 現在、治療が必要な機能低下はありません。このまま予防メインテナンスを続けましょう。</div>`;
+                return;
+            }
+
+            if (selectedPatient.type === 'child') {
+                summaryText.innerText = "少しお口の機能（噛む力や閉じる力）に成長のバランスが偏っている部分が見られます。今から専用の簡単な体操をお家で続けることで、綺麗な歯並びや正しい呼吸、しっかり噛む力をしっかり育てていくことができます！";
+            } else {
+                summaryText.innerText = "年齢とともにお口の筋肉や唾液の分泌が少しだけお休みモード（低下傾向）に入っています。このまま放っておくと「食べこぼし」や「むせる」原因になりますが、お口の体操リハビリを始めることで、何でもおいしく食べられる元気なお口へ引き戻すことができます！";
+            }
+
+            // 完全重複排除したマッピングの出力
+            detectedAnomalies.forEach(anomalyId => {
+                const data = translationMaster[anomalyId];
+                if (!data) return;
+
+                const li = document.createElement('div');
+                li.className = "flex items-center gap-1.5 text-xs text-rose-700 font-bold bg-rose-50/60 px-2.5 py-1.5 rounded-lg border border-rose-100";
+                li.innerHTML = `<span>⚠</span> <span>${data.speech}</span>`;
+                weaknessList.appendChild(li);
+
+                const card = document.createElement('div');
+                card.className = "bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col gap-3 transition-all";
+                card.innerHTML = `
+                    <div class="flex items-start justify-between border-b border-slate-100 pb-2">
+                        <h4 class="text-xs font-bold text-blue-950 flex items-center gap-1">${data.title}</h4>
+                        <span class="text-[9px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded border border-blue-200 tracking-wider">ご自宅用</span>
+                    </div>
+                    <div class="w-full h-32 bg-blue-50/40 rounded-xl border border-blue-100/70 flex flex-col items-center justify-center text-center p-4">
+                        <span class="text-2xl mb-1">🖼️</span>
+                        <p class="text-[11px] font-mono font-bold text-blue-700/80 leading-relaxed">${data.icon}</p>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/50">
+                        <span class="text-[10px] font-bold text-slate-400 block mb-0.5">🐾 体操のやりかた・お約束</span>
+                        <p class="text-xs text-slate-700 leading-relaxed font-medium">${data.procedure}</p>
+                    </div>
+                `;
+                cardsContainer.appendChild(card);
+            });
+        }
+// サービスワーカーをブラウザに登録するPWAコアコード
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js');
+}   
+ </script>
+</body>
+</html>
